@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PullAPIWrapper.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">rocketmq-client 4.9.5-SNAPSHOT</a> &gt; <a href="index.source.html" class="el_package">org.apache.rocketmq.client.impl.consumer</a> &gt; <span class="el_source">PullAPIWrapper.java</span></div><h1>PullAPIWrapper.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the &quot;License&quot;); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.rocketmq.client.impl.consumer;
+
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
+import org.apache.rocketmq.client.consumer.PullCallback;
+import org.apache.rocketmq.client.consumer.PullResult;
+import org.apache.rocketmq.client.consumer.PullStatus;
+import org.apache.rocketmq.client.exception.MQBrokerException;
+import org.apache.rocketmq.client.exception.MQClientException;
+import org.apache.rocketmq.client.hook.FilterMessageContext;
+import org.apache.rocketmq.client.hook.FilterMessageHook;
+import org.apache.rocketmq.client.impl.CommunicationMode;
+import org.apache.rocketmq.client.impl.FindBrokerResult;
+import org.apache.rocketmq.client.impl.factory.MQClientInstance;
+import org.apache.rocketmq.client.log.ClientLogger;
+import org.apache.rocketmq.common.MQVersion;
+import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.filter.ExpressionType;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.common.message.MessageAccessor;
+import org.apache.rocketmq.common.message.MessageConst;
+import org.apache.rocketmq.common.message.MessageDecoder;
+import org.apache.rocketmq.common.message.MessageExt;
+import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.common.protocol.header.PullMessageRequestHeader;
+import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
+import org.apache.rocketmq.common.protocol.route.TopicRouteData;
+import org.apache.rocketmq.common.sysflag.PullSysFlag;
+import org.apache.rocketmq.remoting.exception.RemotingException;
+
+public class PullAPIWrapper {
+<span class="nc" id="L53">    private final InternalLogger log = ClientLogger.getLog();</span>
+    private final MQClientInstance mQClientFactory;
+    private final String consumerGroup;
+    private final boolean unitMode;
+<span class="nc" id="L57">    private ConcurrentMap&lt;MessageQueue, AtomicLong/* brokerId */&gt; pullFromWhichNodeTable =</span>
+        new ConcurrentHashMap&lt;MessageQueue, AtomicLong&gt;(32);
+<span class="nc" id="L59">    private volatile boolean connectBrokerByUser = false;</span>
+<span class="nc" id="L60">    private volatile long defaultBrokerId = MixAll.MASTER_ID;</span>
+<span class="nc" id="L61">    private Random random = new Random(System.currentTimeMillis());</span>
+<span class="nc" id="L62">    private ArrayList&lt;FilterMessageHook&gt; filterMessageHookList = new ArrayList&lt;FilterMessageHook&gt;();</span>
+
+<span class="nc" id="L64">    public PullAPIWrapper(MQClientInstance mQClientFactory, String consumerGroup, boolean unitMode) {</span>
+<span class="nc" id="L65">        this.mQClientFactory = mQClientFactory;</span>
+<span class="nc" id="L66">        this.consumerGroup = consumerGroup;</span>
+<span class="nc" id="L67">        this.unitMode = unitMode;</span>
+<span class="nc" id="L68">    }</span>
+
+    public PullResult processPullResult(final MessageQueue mq, final PullResult pullResult,
+        final SubscriptionData subscriptionData) {
+<span class="nc" id="L72">        PullResultExt pullResultExt = (PullResultExt) pullResult;</span>
+
+<span class="nc" id="L74">        this.updatePullFromWhichNode(mq, pullResultExt.getSuggestWhichBrokerId());</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">        if (PullStatus.FOUND == pullResult.getPullStatus()) {</span>
+<span class="nc" id="L76">            ByteBuffer byteBuffer = ByteBuffer.wrap(pullResultExt.getMessageBinary());</span>
+<span class="nc" id="L77">            List&lt;MessageExt&gt; msgList = MessageDecoder.decodes(byteBuffer);</span>
+
+<span class="nc" id="L79">            List&lt;MessageExt&gt; msgListFilterAgain = msgList;</span>
+<span class="nc bnc" id="L80" title="All 4 branches missed.">            if (!subscriptionData.getTagsSet().isEmpty() &amp;&amp; !subscriptionData.isClassFilterMode()) {</span>
+<span class="nc" id="L81">                msgListFilterAgain = new ArrayList&lt;MessageExt&gt;(msgList.size());</span>
+<span class="nc bnc" id="L82" title="All 2 branches missed.">                for (MessageExt msg : msgList) {</span>
+<span class="nc bnc" id="L83" title="All 2 branches missed.">                    if (msg.getTags() != null) {</span>
+<span class="nc bnc" id="L84" title="All 2 branches missed.">                        if (subscriptionData.getTagsSet().contains(msg.getTags())) {</span>
+<span class="nc" id="L85">                            msgListFilterAgain.add(msg);</span>
+                        }
+                    }
+<span class="nc" id="L88">                }</span>
+            }
+
+<span class="nc bnc" id="L91" title="All 2 branches missed.">            if (this.hasHook()) {</span>
+<span class="nc" id="L92">                FilterMessageContext filterMessageContext = new FilterMessageContext();</span>
+<span class="nc" id="L93">                filterMessageContext.setUnitMode(unitMode);</span>
+<span class="nc" id="L94">                filterMessageContext.setMsgList(msgListFilterAgain);</span>
+<span class="nc" id="L95">                this.executeHook(filterMessageContext);</span>
+            }
+
+<span class="nc bnc" id="L98" title="All 2 branches missed.">            for (MessageExt msg : msgListFilterAgain) {</span>
+<span class="nc" id="L99">                String traFlag = msg.getProperty(MessageConst.PROPERTY_TRANSACTION_PREPARED);</span>
+<span class="nc bnc" id="L100" title="All 2 branches missed.">                if (Boolean.parseBoolean(traFlag)) {</span>
+<span class="nc" id="L101">                    msg.setTransactionId(msg.getProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX));</span>
+                }
+<span class="nc" id="L103">                MessageAccessor.putProperty(msg, MessageConst.PROPERTY_MIN_OFFSET,</span>
+<span class="nc" id="L104">                    Long.toString(pullResult.getMinOffset()));</span>
+<span class="nc" id="L105">                MessageAccessor.putProperty(msg, MessageConst.PROPERTY_MAX_OFFSET,</span>
+<span class="nc" id="L106">                    Long.toString(pullResult.getMaxOffset()));</span>
+<span class="nc" id="L107">                msg.setBrokerName(mq.getBrokerName());</span>
+<span class="nc" id="L108">            }</span>
+
+<span class="nc" id="L110">            pullResultExt.setMsgFoundList(msgListFilterAgain);</span>
+        }
+
+<span class="nc" id="L113">        pullResultExt.setMessageBinary(null);</span>
+
+<span class="nc" id="L115">        return pullResult;</span>
+    }
+
+    public void updatePullFromWhichNode(final MessageQueue mq, final long brokerId) {
+<span class="nc" id="L119">        AtomicLong suggest = this.pullFromWhichNodeTable.get(mq);</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">        if (null == suggest) {</span>
+<span class="nc" id="L121">            this.pullFromWhichNodeTable.put(mq, new AtomicLong(brokerId));</span>
+        } else {
+<span class="nc" id="L123">            suggest.set(brokerId);</span>
+        }
+<span class="nc" id="L125">    }</span>
+
+    public boolean hasHook() {
+<span class="nc bnc" id="L128" title="All 2 branches missed.">        return !this.filterMessageHookList.isEmpty();</span>
+    }
+
+    public void executeHook(final FilterMessageContext context) {
+<span class="nc bnc" id="L132" title="All 2 branches missed.">        if (!this.filterMessageHookList.isEmpty()) {</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">            for (FilterMessageHook hook : this.filterMessageHookList) {</span>
+                try {
+<span class="nc" id="L135">                    hook.filterMessage(context);</span>
+<span class="nc" id="L136">                } catch (Throwable e) {</span>
+<span class="nc" id="L137">                    log.error(&quot;execute hook error. hookName={}&quot;, hook.hookName());</span>
+<span class="nc" id="L138">                }</span>
+<span class="nc" id="L139">            }</span>
+        }
+<span class="nc" id="L141">    }</span>
+
+    public PullResult pullKernelImpl(
+        final MessageQueue mq,
+        final String subExpression,
+        final String expressionType,
+        final long subVersion,
+        final long offset,
+        final int maxNums,
+        final int sysFlag,
+        final long commitOffset,
+        final long brokerSuspendMaxTimeMillis,
+        final long timeoutMillis,
+        final CommunicationMode communicationMode,
+        final PullCallback pullCallback
+    ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+<span class="nc" id="L157">        FindBrokerResult findBrokerResult =</span>
+<span class="nc" id="L158">            this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),</span>
+<span class="nc" id="L159">                this.recalculatePullFromWhichNode(mq), false);</span>
+<span class="nc bnc" id="L160" title="All 2 branches missed.">        if (null == findBrokerResult) {</span>
+<span class="nc" id="L161">            this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());</span>
+<span class="nc" id="L162">            findBrokerResult =</span>
+<span class="nc" id="L163">                this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),</span>
+<span class="nc" id="L164">                    this.recalculatePullFromWhichNode(mq), false);</span>
+        }
+
+<span class="nc bnc" id="L167" title="All 2 branches missed.">        if (findBrokerResult != null) {</span>
+            {
+                // check version
+<span class="nc bnc" id="L170" title="All 2 branches missed.">                if (!ExpressionType.isTagType(expressionType)</span>
+<span class="nc bnc" id="L171" title="All 2 branches missed.">                    &amp;&amp; findBrokerResult.getBrokerVersion() &lt; MQVersion.Version.V4_1_0_SNAPSHOT.ordinal()) {</span>
+<span class="nc" id="L172">                    throw new MQClientException(&quot;The broker[&quot; + mq.getBrokerName() + &quot;, &quot;</span>
+<span class="nc" id="L173">                        + findBrokerResult.getBrokerVersion() + &quot;] does not upgrade to support for filter message by &quot; + expressionType, null);</span>
+                }
+            }
+<span class="nc" id="L176">            int sysFlagInner = sysFlag;</span>
+
+<span class="nc bnc" id="L178" title="All 2 branches missed.">            if (findBrokerResult.isSlave()) {</span>
+<span class="nc" id="L179">                sysFlagInner = PullSysFlag.clearCommitOffsetFlag(sysFlagInner);</span>
+            }
+
+<span class="nc" id="L182">            PullMessageRequestHeader requestHeader = new PullMessageRequestHeader();</span>
+<span class="nc" id="L183">            requestHeader.setConsumerGroup(this.consumerGroup);</span>
+<span class="nc" id="L184">            requestHeader.setTopic(mq.getTopic());</span>
+<span class="nc" id="L185">            requestHeader.setQueueId(mq.getQueueId());</span>
+<span class="nc" id="L186">            requestHeader.setQueueOffset(offset);</span>
+<span class="nc" id="L187">            requestHeader.setMaxMsgNums(maxNums);</span>
+<span class="nc" id="L188">            requestHeader.setSysFlag(sysFlagInner);</span>
+<span class="nc" id="L189">            requestHeader.setCommitOffset(commitOffset);</span>
+<span class="nc" id="L190">            requestHeader.setSuspendTimeoutMillis(brokerSuspendMaxTimeMillis);</span>
+<span class="nc" id="L191">            requestHeader.setSubscription(subExpression);</span>
+<span class="nc" id="L192">            requestHeader.setSubVersion(subVersion);</span>
+<span class="nc" id="L193">            requestHeader.setExpressionType(expressionType);</span>
+<span class="nc" id="L194">            requestHeader.setBname(mq.getBrokerName());</span>
+
+<span class="nc" id="L196">            String brokerAddr = findBrokerResult.getBrokerAddr();</span>
+<span class="nc bnc" id="L197" title="All 2 branches missed.">            if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {</span>
+<span class="nc" id="L198">                brokerAddr = computePullFromWhichFilterServer(mq.getTopic(), brokerAddr);</span>
+            }
+
+<span class="nc" id="L201">            PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(</span>
+                brokerAddr,
+                requestHeader,
+                timeoutMillis,
+                communicationMode,
+                pullCallback);
+
+<span class="nc" id="L208">            return pullResult;</span>
+        }
+
+<span class="nc" id="L211">        throw new MQClientException(&quot;The broker[&quot; + mq.getBrokerName() + &quot;] not exist&quot;, null);</span>
+    }
+
+    public long recalculatePullFromWhichNode(final MessageQueue mq) {
+<span class="nc bnc" id="L215" title="All 2 branches missed.">        if (this.isConnectBrokerByUser()) {</span>
+<span class="nc" id="L216">            return this.defaultBrokerId;</span>
+        }
+
+<span class="nc" id="L219">        AtomicLong suggest = this.pullFromWhichNodeTable.get(mq);</span>
+<span class="nc bnc" id="L220" title="All 2 branches missed.">        if (suggest != null) {</span>
+<span class="nc" id="L221">            return suggest.get();</span>
+        }
+
+<span class="nc" id="L224">        return MixAll.MASTER_ID;</span>
+    }
+
+    private String computePullFromWhichFilterServer(final String topic, final String brokerAddr)
+        throws MQClientException {
+<span class="nc" id="L229">        ConcurrentMap&lt;String, TopicRouteData&gt; topicRouteTable = this.mQClientFactory.getTopicRouteTable();</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">        if (topicRouteTable != null) {</span>
+<span class="nc" id="L231">            TopicRouteData topicRouteData = topicRouteTable.get(topic);</span>
+<span class="nc" id="L232">            List&lt;String&gt; list = topicRouteData.getFilterServerTable().get(brokerAddr);</span>
+
+<span class="nc bnc" id="L234" title="All 4 branches missed.">            if (list != null &amp;&amp; !list.isEmpty()) {</span>
+<span class="nc" id="L235">                return list.get(randomNum() % list.size());</span>
+            }
+        }
+
+<span class="nc" id="L239">        throw new MQClientException(&quot;Find Filter Server Failed, Broker Addr: &quot; + brokerAddr + &quot; topic: &quot;</span>
+            + topic, null);
+    }
+
+    public boolean isConnectBrokerByUser() {
+<span class="nc" id="L244">        return connectBrokerByUser;</span>
+    }
+
+    public void setConnectBrokerByUser(boolean connectBrokerByUser) {
+<span class="nc" id="L248">        this.connectBrokerByUser = connectBrokerByUser;</span>
+
+<span class="nc" id="L250">    }</span>
+
+    public int randomNum() {
+<span class="nc" id="L253">        int value = random.nextInt();</span>
+<span class="nc bnc" id="L254" title="All 2 branches missed.">        if (value &lt; 0) {</span>
+<span class="nc" id="L255">            value = Math.abs(value);</span>
+<span class="nc bnc" id="L256" title="All 2 branches missed.">            if (value &lt; 0)</span>
+<span class="nc" id="L257">                value = 0;</span>
+        }
+<span class="nc" id="L259">        return value;</span>
+    }
+
+    public void registerFilterMessageHook(ArrayList&lt;FilterMessageHook&gt; filterMessageHookList) {
+<span class="nc" id="L263">        this.filterMessageHookList = filterMessageHookList;</span>
+<span class="nc" id="L264">    }</span>
+
+    public long getDefaultBrokerId() {
+<span class="nc" id="L267">        return defaultBrokerId;</span>
+    }
+
+    public void setDefaultBrokerId(long defaultBrokerId) {
+<span class="nc" id="L271">        this.defaultBrokerId = defaultBrokerId;</span>
+<span class="nc" id="L272">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

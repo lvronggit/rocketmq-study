@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RemoteBrokerOffsetStore.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">rocketmq-client 4.9.5-SNAPSHOT</a> &gt; <a href="index.source.html" class="el_package">org.apache.rocketmq.client.consumer.store</a> &gt; <span class="el_source">RemoteBrokerOffsetStore.java</span></div><h1>RemoteBrokerOffsetStore.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the &quot;License&quot;); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.rocketmq.client.consumer.store;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
+import org.apache.rocketmq.client.exception.MQBrokerException;
+import org.apache.rocketmq.client.exception.MQClientException;
+import org.apache.rocketmq.client.impl.FindBrokerResult;
+import org.apache.rocketmq.client.impl.factory.MQClientInstance;
+import org.apache.rocketmq.client.log.ClientLogger;
+import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.UtilAll;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.common.protocol.header.QueryConsumerOffsetRequestHeader;
+import org.apache.rocketmq.common.protocol.header.UpdateConsumerOffsetRequestHeader;
+import org.apache.rocketmq.remoting.exception.RemotingException;
+
+/**
+ * Remote storage implementation
+ */
+public class RemoteBrokerOffsetStore implements OffsetStore {
+<span class="nc" id="L43">    private final static InternalLogger log = ClientLogger.getLog();</span>
+    private final MQClientInstance mQClientFactory;
+    private final String groupName;
+<span class="nc" id="L46">    private ConcurrentMap&lt;MessageQueue, AtomicLong&gt; offsetTable =</span>
+        new ConcurrentHashMap&lt;MessageQueue, AtomicLong&gt;();
+
+<span class="nc" id="L49">    public RemoteBrokerOffsetStore(MQClientInstance mQClientFactory, String groupName) {</span>
+<span class="nc" id="L50">        this.mQClientFactory = mQClientFactory;</span>
+<span class="nc" id="L51">        this.groupName = groupName;</span>
+<span class="nc" id="L52">    }</span>
+
+    @Override
+    public void load() {
+<span class="nc" id="L56">    }</span>
+
+    @Override
+    public void updateOffset(MessageQueue mq, long offset, boolean increaseOnly) {
+<span class="nc bnc" id="L60" title="All 2 branches missed.">        if (mq != null) {</span>
+<span class="nc" id="L61">            AtomicLong offsetOld = this.offsetTable.get(mq);</span>
+<span class="nc bnc" id="L62" title="All 2 branches missed.">            if (null == offsetOld) {</span>
+<span class="nc" id="L63">                offsetOld = this.offsetTable.putIfAbsent(mq, new AtomicLong(offset));</span>
+            }
+
+<span class="nc bnc" id="L66" title="All 2 branches missed.">            if (null != offsetOld) {</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">                if (increaseOnly) {</span>
+<span class="nc" id="L68">                    MixAll.compareAndIncreaseOnly(offsetOld, offset);</span>
+                } else {
+<span class="nc" id="L70">                    offsetOld.set(offset);</span>
+                }
+            }
+        }
+<span class="nc" id="L74">    }</span>
+
+    @Override
+    public long readOffset(final MessageQueue mq, final ReadOffsetType type) {
+<span class="nc bnc" id="L78" title="All 2 branches missed.">        if (mq != null) {</span>
+<span class="nc bnc" id="L79" title="All 3 branches missed.">            switch (type) {</span>
+                case MEMORY_FIRST_THEN_STORE:
+                case READ_FROM_MEMORY: {
+<span class="nc" id="L82">                    AtomicLong offset = this.offsetTable.get(mq);</span>
+<span class="nc bnc" id="L83" title="All 2 branches missed.">                    if (offset != null) {</span>
+<span class="nc" id="L84">                        return offset.get();</span>
+<span class="nc bnc" id="L85" title="All 2 branches missed.">                    } else if (ReadOffsetType.READ_FROM_MEMORY == type) {</span>
+<span class="nc" id="L86">                        return -1;</span>
+                    }
+                }
+                case READ_FROM_STORE: {
+                    try {
+<span class="nc" id="L91">                        long brokerOffset = this.fetchConsumeOffsetFromBroker(mq);</span>
+<span class="nc" id="L92">                        AtomicLong offset = new AtomicLong(brokerOffset);</span>
+<span class="nc" id="L93">                        this.updateOffset(mq, offset.get(), false);</span>
+<span class="nc" id="L94">                        return brokerOffset;</span>
+                    }
+                    // No offset in broker
+<span class="nc" id="L97">                    catch (MQBrokerException e) {</span>
+<span class="nc" id="L98">                        return -1;</span>
+                    }
+                    //Other exceptions
+<span class="nc" id="L101">                    catch (Exception e) {</span>
+<span class="nc" id="L102">                        log.warn(&quot;fetchConsumeOffsetFromBroker exception, &quot; + mq, e);</span>
+<span class="nc" id="L103">                        return -2;</span>
+                    }
+                }
+                default:
+                    break;
+            }
+        }
+
+<span class="nc" id="L111">        return -1;</span>
+    }
+
+    @Override
+    public void persistAll(Set&lt;MessageQueue&gt; mqs) {
+<span class="nc bnc" id="L116" title="All 4 branches missed.">        if (null == mqs || mqs.isEmpty())</span>
+<span class="nc" id="L117">            return;</span>
+
+<span class="nc" id="L119">        final HashSet&lt;MessageQueue&gt; unusedMQ = new HashSet&lt;MessageQueue&gt;();</span>
+
+<span class="nc bnc" id="L121" title="All 2 branches missed.">        for (Map.Entry&lt;MessageQueue, AtomicLong&gt; entry : this.offsetTable.entrySet()) {</span>
+<span class="nc" id="L122">            MessageQueue mq = entry.getKey();</span>
+<span class="nc" id="L123">            AtomicLong offset = entry.getValue();</span>
+<span class="nc bnc" id="L124" title="All 2 branches missed.">            if (offset != null) {</span>
+<span class="nc bnc" id="L125" title="All 2 branches missed.">                if (mqs.contains(mq)) {</span>
+                    try {
+<span class="nc" id="L127">                        this.updateConsumeOffsetToBroker(mq, offset.get());</span>
+<span class="nc" id="L128">                        log.info(&quot;[persistAll] Group: {} ClientId: {} updateConsumeOffsetToBroker {} {}&quot;,</span>
+                            this.groupName,
+<span class="nc" id="L130">                            this.mQClientFactory.getClientId(),</span>
+                            mq,
+<span class="nc" id="L132">                            offset.get());</span>
+<span class="nc" id="L133">                    } catch (Exception e) {</span>
+<span class="nc" id="L134">                        log.error(&quot;updateConsumeOffsetToBroker exception, &quot; + mq.toString(), e);</span>
+<span class="nc" id="L135">                    }</span>
+                } else {
+<span class="nc" id="L137">                    unusedMQ.add(mq);</span>
+                }
+            }
+<span class="nc" id="L140">        }</span>
+
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        if (!unusedMQ.isEmpty()) {</span>
+<span class="nc bnc" id="L143" title="All 2 branches missed.">            for (MessageQueue mq : unusedMQ) {</span>
+<span class="nc" id="L144">                this.offsetTable.remove(mq);</span>
+<span class="nc" id="L145">                log.info(&quot;remove unused mq, {}, {}&quot;, mq, this.groupName);</span>
+<span class="nc" id="L146">            }</span>
+        }
+<span class="nc" id="L148">    }</span>
+
+    @Override
+    public void persist(MessageQueue mq) {
+<span class="nc" id="L152">        AtomicLong offset = this.offsetTable.get(mq);</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        if (offset != null) {</span>
+            try {
+<span class="nc" id="L155">                this.updateConsumeOffsetToBroker(mq, offset.get());</span>
+<span class="nc" id="L156">                log.info(&quot;[persist] Group: {} ClientId: {} updateConsumeOffsetToBroker {} {}&quot;,</span>
+                    this.groupName,
+<span class="nc" id="L158">                    this.mQClientFactory.getClientId(),</span>
+                    mq,
+<span class="nc" id="L160">                    offset.get());</span>
+<span class="nc" id="L161">            } catch (Exception e) {</span>
+<span class="nc" id="L162">                log.error(&quot;updateConsumeOffsetToBroker exception, &quot; + mq.toString(), e);</span>
+<span class="nc" id="L163">            }</span>
+        }
+<span class="nc" id="L165">    }</span>
+
+    public void removeOffset(MessageQueue mq) {
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (mq != null) {</span>
+<span class="nc" id="L169">            this.offsetTable.remove(mq);</span>
+<span class="nc" id="L170">            log.info(&quot;remove unnecessary messageQueue offset. group={}, mq={}, offsetTableSize={}&quot;, this.groupName, mq,</span>
+<span class="nc" id="L171">                offsetTable.size());</span>
+        }
+<span class="nc" id="L173">    }</span>
+
+    @Override
+    public Map&lt;MessageQueue, Long&gt; cloneOffsetTable(String topic) {
+<span class="nc" id="L177">        Map&lt;MessageQueue, Long&gt; cloneOffsetTable = new HashMap&lt;MessageQueue, Long&gt;(this.offsetTable.size(), 1);</span>
+<span class="nc bnc" id="L178" title="All 2 branches missed.">        for (Map.Entry&lt;MessageQueue, AtomicLong&gt; entry : this.offsetTable.entrySet()) {</span>
+<span class="nc" id="L179">            MessageQueue mq = entry.getKey();</span>
+<span class="nc bnc" id="L180" title="All 4 branches missed.">            if (!UtilAll.isBlank(topic) &amp;&amp; !topic.equals(mq.getTopic())) {</span>
+<span class="nc" id="L181">                continue;</span>
+            }
+<span class="nc" id="L183">            cloneOffsetTable.put(mq, entry.getValue().get());</span>
+<span class="nc" id="L184">        }</span>
+<span class="nc" id="L185">        return cloneOffsetTable;</span>
+    }
+
+    /**
+     * Update the Consumer Offset in one way, once the Master is off, updated to Slave, here need to be optimized.
+     */
+    private void updateConsumeOffsetToBroker(MessageQueue mq, long offset) throws RemotingException,
+        MQBrokerException, InterruptedException, MQClientException {
+<span class="nc" id="L193">        updateConsumeOffsetToBroker(mq, offset, true);</span>
+<span class="nc" id="L194">    }</span>
+
+    /**
+     * Update the Consumer Offset synchronously, once the Master is off, updated to Slave, here need to be optimized.
+     */
+    @Override
+    public void updateConsumeOffsetToBroker(MessageQueue mq, long offset, boolean isOneway) throws RemotingException,
+        MQBrokerException, InterruptedException, MQClientException {
+<span class="nc" id="L202">        FindBrokerResult findBrokerResult = this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(), MixAll.MASTER_ID, true);</span>
+<span class="nc bnc" id="L203" title="All 2 branches missed.">        if (null == findBrokerResult) {</span>
+<span class="nc" id="L204">            this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());</span>
+<span class="nc" id="L205">            findBrokerResult = this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(), MixAll.MASTER_ID, false);</span>
+        }
+
+<span class="nc bnc" id="L208" title="All 2 branches missed.">        if (findBrokerResult != null) {</span>
+<span class="nc" id="L209">            UpdateConsumerOffsetRequestHeader requestHeader = new UpdateConsumerOffsetRequestHeader();</span>
+<span class="nc" id="L210">            requestHeader.setTopic(mq.getTopic());</span>
+<span class="nc" id="L211">            requestHeader.setConsumerGroup(this.groupName);</span>
+<span class="nc" id="L212">            requestHeader.setQueueId(mq.getQueueId());</span>
+<span class="nc" id="L213">            requestHeader.setCommitOffset(offset);</span>
+<span class="nc" id="L214">            requestHeader.setBname(mq.getBrokerName());</span>
+
+<span class="nc bnc" id="L216" title="All 2 branches missed.">            if (isOneway) {</span>
+<span class="nc" id="L217">                this.mQClientFactory.getMQClientAPIImpl().updateConsumerOffsetOneway(</span>
+<span class="nc" id="L218">                    findBrokerResult.getBrokerAddr(), requestHeader, 1000 * 5);</span>
+            } else {
+<span class="nc" id="L220">                this.mQClientFactory.getMQClientAPIImpl().updateConsumerOffset(</span>
+<span class="nc" id="L221">                    findBrokerResult.getBrokerAddr(), requestHeader, 1000 * 5);</span>
+            }
+<span class="nc" id="L223">        } else {</span>
+<span class="nc" id="L224">            throw new MQClientException(&quot;The broker[&quot; + mq.getBrokerName() + &quot;] not exist&quot;, null);</span>
+        }
+<span class="nc" id="L226">    }</span>
+
+    private long fetchConsumeOffsetFromBroker(MessageQueue mq) throws RemotingException, MQBrokerException,
+        InterruptedException, MQClientException {
+<span class="nc" id="L230">        FindBrokerResult findBrokerResult = this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(), MixAll.MASTER_ID, true);</span>
+<span class="nc bnc" id="L231" title="All 2 branches missed.">        if (null == findBrokerResult) {</span>
+
+<span class="nc" id="L233">            this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());</span>
+<span class="nc" id="L234">            findBrokerResult = this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(), MixAll.MASTER_ID, false);</span>
+        }
+
+<span class="nc bnc" id="L237" title="All 2 branches missed.">        if (findBrokerResult != null) {</span>
+<span class="nc" id="L238">            QueryConsumerOffsetRequestHeader requestHeader = new QueryConsumerOffsetRequestHeader();</span>
+<span class="nc" id="L239">            requestHeader.setTopic(mq.getTopic());</span>
+<span class="nc" id="L240">            requestHeader.setConsumerGroup(this.groupName);</span>
+<span class="nc" id="L241">            requestHeader.setQueueId(mq.getQueueId());</span>
+<span class="nc" id="L242">            requestHeader.setBname(mq.getBrokerName());</span>
+
+<span class="nc" id="L244">            return this.mQClientFactory.getMQClientAPIImpl().queryConsumerOffset(</span>
+<span class="nc" id="L245">                findBrokerResult.getBrokerAddr(), requestHeader, 1000 * 5);</span>
+        } else {
+<span class="nc" id="L247">            throw new MQClientException(&quot;The broker[&quot; + mq.getBrokerName() + &quot;] not exist&quot;, null);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

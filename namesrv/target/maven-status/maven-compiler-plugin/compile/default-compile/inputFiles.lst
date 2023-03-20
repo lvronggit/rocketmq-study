@@ -1,0 +1,8 @@
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/namesrv/src/main/java/org/apache/rocketmq/namesrv/NamesrvController.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/namesrv/src/main/java/org/apache/rocketmq/namesrv/kvconfig/KVConfigSerializeWrapper.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/namesrv/src/main/java/org/apache/rocketmq/namesrv/NamesrvStartup.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/namesrv/src/main/java/org/apache/rocketmq/namesrv/routeinfo/BrokerHousekeepingService.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/namesrv/src/main/java/org/apache/rocketmq/namesrv/processor/DefaultRequestProcessor.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/namesrv/src/main/java/org/apache/rocketmq/namesrv/kvconfig/KVConfigManager.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/namesrv/src/main/java/org/apache/rocketmq/namesrv/processor/ClusterTestRequestProcessor.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/namesrv/src/main/java/org/apache/rocketmq/namesrv/routeinfo/RouteInfoManager.java

@@ -1,0 +1,9 @@
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/plain/RemoteAddressStrategyTest.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/common/AclSignerTest.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/common/AclClientRPCHookTest.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/common/SessionCredentialsTest.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/plain/PlainPermissionManagerTest.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/plain/PlainAccessControlFlowTest.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/common/AclUtilsTest.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/plain/PlainAccessValidatorTest.java
+/Users/lvrong/IdeaProjects/rocketmq-study-lv/acl/src/test/java/org/apache/rocketmq/acl/common/PermissionTest.java

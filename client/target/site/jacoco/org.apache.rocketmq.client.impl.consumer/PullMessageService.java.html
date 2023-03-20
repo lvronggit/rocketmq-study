@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PullMessageService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">rocketmq-client 4.9.5-SNAPSHOT</a> &gt; <a href="index.source.html" class="el_package">org.apache.rocketmq.client.impl.consumer</a> &gt; <span class="el_source">PullMessageService.java</span></div><h1>PullMessageService.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the &quot;License&quot;); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.rocketmq.client.impl.consumer;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import org.apache.rocketmq.client.impl.factory.MQClientInstance;
+import org.apache.rocketmq.client.log.ClientLogger;
+import org.apache.rocketmq.common.ServiceThread;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.common.utils.ThreadUtils;
+
+public class PullMessageService extends ServiceThread {
+<span class="nc" id="L31">    private final InternalLogger log = ClientLogger.getLog();</span>
+<span class="nc" id="L32">    private final LinkedBlockingQueue&lt;PullRequest&gt; pullRequestQueue = new LinkedBlockingQueue&lt;PullRequest&gt;();</span>
+    private final MQClientInstance mQClientFactory;
+<span class="nc" id="L34">    private final ScheduledExecutorService scheduledExecutorService = Executors</span>
+<span class="nc" id="L35">        .newSingleThreadScheduledExecutor(new ThreadFactory() {</span>
+            @Override
+            public Thread newThread(Runnable r) {
+<span class="nc" id="L38">                return new Thread(r, &quot;PullMessageServiceScheduledThread&quot;);</span>
+            }
+        });
+
+<span class="nc" id="L42">    public PullMessageService(MQClientInstance mQClientFactory) {</span>
+<span class="nc" id="L43">        this.mQClientFactory = mQClientFactory;</span>
+<span class="nc" id="L44">    }</span>
+
+    public void executePullRequestLater(final PullRequest pullRequest, final long timeDelay) {
+<span class="nc bnc" id="L47" title="All 2 branches missed.">        if (!isStopped()) {</span>
+<span class="nc" id="L48">            this.scheduledExecutorService.schedule(new Runnable() {</span>
+                @Override
+                public void run() {
+<span class="nc" id="L51">                    PullMessageService.this.executePullRequestImmediately(pullRequest);</span>
+<span class="nc" id="L52">                }</span>
+            }, timeDelay, TimeUnit.MILLISECONDS);
+        } else {
+<span class="nc" id="L55">            log.warn(&quot;PullMessageServiceScheduledThread has shutdown&quot;);</span>
+        }
+<span class="nc" id="L57">    }</span>
+
+    public void executePullRequestImmediately(final PullRequest pullRequest) {
+        try {
+<span class="nc" id="L61">            this.pullRequestQueue.put(pullRequest);</span>
+<span class="nc" id="L62">        } catch (InterruptedException e) {</span>
+<span class="nc" id="L63">            log.error(&quot;executePullRequestImmediately pullRequestQueue.put&quot;, e);</span>
+<span class="nc" id="L64">        }</span>
+<span class="nc" id="L65">    }</span>
+
+    public void executeTaskLater(final Runnable r, final long timeDelay) {
+<span class="nc bnc" id="L68" title="All 2 branches missed.">        if (!isStopped()) {</span>
+<span class="nc" id="L69">            this.scheduledExecutorService.schedule(r, timeDelay, TimeUnit.MILLISECONDS);</span>
+        } else {
+<span class="nc" id="L71">            log.warn(&quot;PullMessageServiceScheduledThread has shutdown&quot;);</span>
+        }
+<span class="nc" id="L73">    }</span>
+
+    public ScheduledExecutorService getScheduledExecutorService() {
+<span class="nc" id="L76">        return scheduledExecutorService;</span>
+    }
+
+    private void pullMessage(final PullRequest pullRequest) {
+<span class="nc" id="L80">        final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());</span>
+<span class="nc bnc" id="L81" title="All 2 branches missed.">        if (consumer != null) {</span>
+<span class="nc" id="L82">            DefaultMQPushConsumerImpl impl = (DefaultMQPushConsumerImpl) consumer;</span>
+<span class="nc" id="L83">            impl.pullMessage(pullRequest);</span>
+<span class="nc" id="L84">        } else {</span>
+<span class="nc" id="L85">            log.warn(&quot;No matched consumer for the PullRequest {}, drop it&quot;, pullRequest);</span>
+        }
+<span class="nc" id="L87">    }</span>
+
+    @Override
+    public void run() {
+<span class="nc" id="L91">        log.info(this.getServiceName() + &quot; service started&quot;);</span>
+
+<span class="nc bnc" id="L93" title="All 2 branches missed.">        while (!this.isStopped()) {</span>
+            try {
+<span class="nc" id="L95">                PullRequest pullRequest = this.pullRequestQueue.take();</span>
+<span class="nc" id="L96">                this.pullMessage(pullRequest);</span>
+<span class="nc" id="L97">            } catch (InterruptedException ignored) {</span>
+<span class="nc" id="L98">            } catch (Exception e) {</span>
+<span class="nc" id="L99">                log.error(&quot;Pull Message Service Run Method exception&quot;, e);</span>
+<span class="nc" id="L100">            }</span>
+        }
+
+<span class="nc" id="L103">        log.info(this.getServiceName() + &quot; service end&quot;);</span>
+<span class="nc" id="L104">    }</span>
+
+    @Override
+    public void shutdown(boolean interrupt) {
+<span class="nc" id="L108">        super.shutdown(interrupt);</span>
+<span class="nc" id="L109">        ThreadUtils.shutdownGracefully(this.scheduledExecutorService, 1000, TimeUnit.MILLISECONDS);</span>
+<span class="nc" id="L110">    }</span>
+
+    @Override
+    public String getServiceName() {
+<span class="nc" id="L114">        return PullMessageService.class.getSimpleName();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PullMessageResponseHeader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">rocketmq-common 4.9.5-SNAPSHOT</a> &gt; <a href="index.source.html" class="el_package">org.apache.rocketmq.common.protocol.header</a> &gt; <span class="el_source">PullMessageResponseHeader.java</span></div><h1>PullMessageResponseHeader.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the &quot;License&quot;); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * $Id: PullMessageResponseHeader.java 1835 2013-05-16 02:00:50Z vintagewang@apache.org $
+ */
+package org.apache.rocketmq.common.protocol.header;
+
+import java.util.HashMap;
+
+import org.apache.rocketmq.remoting.CommandCustomHeader;
+import org.apache.rocketmq.remoting.annotation.CFNotNull;
+import org.apache.rocketmq.remoting.exception.RemotingCommandException;
+import org.apache.rocketmq.remoting.protocol.FastCodesHeader;
+
+import io.netty.buffer.ByteBuf;
+
+<span class="fc" id="L32">public class PullMessageResponseHeader implements CommandCustomHeader, FastCodesHeader {</span>
+    @CFNotNull
+    private Long suggestWhichBrokerId;
+    @CFNotNull
+    private Long nextBeginOffset;
+    @CFNotNull
+    private Long minOffset;
+    @CFNotNull
+    private Long maxOffset;
+
+    @Override
+    public void checkFields() throws RemotingCommandException {
+<span class="fc" id="L44">    }</span>
+
+    @Override
+    public void encode(ByteBuf out) {
+<span class="nc" id="L48">        writeIfNotNull(out, &quot;suggestWhichBrokerId&quot;, suggestWhichBrokerId);</span>
+<span class="nc" id="L49">        writeIfNotNull(out, &quot;nextBeginOffset&quot;, nextBeginOffset);</span>
+<span class="nc" id="L50">        writeIfNotNull(out, &quot;minOffset&quot;, minOffset);</span>
+<span class="nc" id="L51">        writeIfNotNull(out, &quot;maxOffset&quot;, maxOffset);</span>
+<span class="nc" id="L52">    }</span>
+
+    @Override
+    public void decode(HashMap&lt;String, String&gt; fields) throws RemotingCommandException {
+<span class="fc" id="L56">        String str = getAndCheckNotNull(fields, &quot;suggestWhichBrokerId&quot;);</span>
+<span class="pc bpc" id="L57" title="1 of 2 branches missed.">        if (str != null) {</span>
+<span class="fc" id="L58">            this.suggestWhichBrokerId = Long.parseLong(str);</span>
+        }
+
+<span class="fc" id="L61">        str = getAndCheckNotNull(fields, &quot;nextBeginOffset&quot;);</span>
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">        if (str != null) {</span>
+<span class="fc" id="L63">            this.nextBeginOffset = Long.parseLong(str);</span>
+        }
+
+<span class="fc" id="L66">        str = getAndCheckNotNull(fields, &quot;minOffset&quot;);</span>
+<span class="pc bpc" id="L67" title="1 of 2 branches missed.">        if (str != null) {</span>
+<span class="fc" id="L68">            this.minOffset = Long.parseLong(str);</span>
+        }
+
+<span class="fc" id="L71">        str = getAndCheckNotNull(fields, &quot;maxOffset&quot;);</span>
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">        if (str != null) {</span>
+<span class="fc" id="L73">            this.maxOffset = Long.parseLong(str);</span>
+        }
+<span class="fc" id="L75">    }</span>
+
+    public Long getNextBeginOffset() {
+<span class="nc" id="L78">        return nextBeginOffset;</span>
+    }
+
+    public void setNextBeginOffset(Long nextBeginOffset) {
+<span class="nc" id="L82">        this.nextBeginOffset = nextBeginOffset;</span>
+<span class="nc" id="L83">    }</span>
+
+    public Long getMinOffset() {
+<span class="nc" id="L86">        return minOffset;</span>
+    }
+
+    public void setMinOffset(Long minOffset) {
+<span class="nc" id="L90">        this.minOffset = minOffset;</span>
+<span class="nc" id="L91">    }</span>
+
+    public Long getMaxOffset() {
+<span class="nc" id="L94">        return maxOffset;</span>
+    }
+
+    public void setMaxOffset(Long maxOffset) {
+<span class="nc" id="L98">        this.maxOffset = maxOffset;</span>
+<span class="nc" id="L99">    }</span>
+
+    public Long getSuggestWhichBrokerId() {
+<span class="nc" id="L102">        return suggestWhichBrokerId;</span>
+    }
+
+    public void setSuggestWhichBrokerId(Long suggestWhichBrokerId) {
+<span class="nc" id="L106">        this.suggestWhichBrokerId = suggestWhichBrokerId;</span>
+<span class="nc" id="L107">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

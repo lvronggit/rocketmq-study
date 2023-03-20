@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<checkstyle version="8.29">
+<file name="/Users/lvrong/IdeaProjects/rocketmq-study-lv/srvutil/src/main/java/org/apache/rocketmq/srvutil/FileWatchService.java">
+</file>
+<file name="/Users/lvrong/IdeaProjects/rocketmq-study-lv/srvutil/src/main/java/org/apache/rocketmq/srvutil/ShutdownHookThread.java">
+</file>
+<file name="/Users/lvrong/IdeaProjects/rocketmq-study-lv/srvutil/src/main/java/org/apache/rocketmq/srvutil/ServerUtil.java">
+</file>
+<file name="/Users/lvrong/IdeaProjects/rocketmq-study-lv/srvutil/src/main/java/org/apache/rocketmq/srvutil/AclFileWatchService.java">
+</file>
+</checkstyle>
